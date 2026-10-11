@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>勤怠管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #dfe9f1;
+      --ink: #1d2b45;
+      --sub: #5d6b82;
+      --in: #12857f;
+      --in-dark: #0c6561;
+      --out: #5a49a6;
+      --out-dark: #43357f;
+      --brk: #a8651b;
+      --brk-dark: #7f4b12;
+      --card: #ffffff;
+      --panel: #eef3f8;
+    }
+ 
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+ 
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 15%, #b9e3df 0, transparent 38%),
+        radial-gradient(circle at 88% 85%, #cfc7f0 0, transparent 40%),
+        var(--bg);
+      background-attachment: fixed;
+    }
+ 
+    .app { width: 100%; max-width: 720px; margin: 4vh auto 0; }
+ 
+    /* ---------- メニューバー ---------- */
+    .menu {
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      margin-bottom: 18px;
+      background: var(--card);
+      border-radius: 999px;
+      box-shadow: 0 12px 30px -16px rgba(29, 43, 69, .4);
+    }
+    .menu button {
+      flex: 1;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--sub);
+      background: transparent;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 8px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .menu button:hover { background: var(--panel); }
+    .menu button[aria-current="page"] { background: var(--ink); color: #fff; }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 3px solid var(--ink);
+      outline-offset: 2px;
+    }
+ 
+    /* ---------- カード ---------- */
+    .slip {
+      background: var(--card);
+      border-radius: 28px;
+      padding: 36px 32px 32px;
+      box-shadow: 0 24px 60px -20px rgba(29, 43, 69, .35);
+      position: relative;
+      overflow: hidden;
+    }
+    .slip::before {
+      content: "";
+      position: absolute;
+      top: 14px; left: 28px; right: 28px;
+      border-top: 3px dotted #c7d3e0;
+    }
+    .punch { max-width: 460px; margin: 0 auto; }
+ 
+    h1 {
+      margin: 8px 0 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--sub);
+      text-align: center;
+      letter-spacing: .08em;
+    }
+ 
+    /* ---------- 打刻 ---------- */
+    #date { margin-top: 18px; text-align: center; font-size: 1.1rem; color: var(--sub); }
+    #clock {
+      text-align: center;
+      font-size: clamp(3.4rem, 17vw, 5rem);
+      font-weight: 900;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .02em;
+      margin: 4px 0 18px;
+    }
+ 
+    /* 今の状態 */
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 0 22px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--sub);
+      font-weight: 700;
+    }
+    .status::before {
+      content: "";
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status[data-state="working"] { background: #dcf2f0; color: var(--in-dark); }
+    .status[data-state="break"]   { background: #fbead2; color: var(--brk-dark); }
+    .status[data-state="done"]    { background: #e6e1f6; color: var(--out-dark); }
+ 
+    .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .big {
+      font: inherit;
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: #fff;
+      border: 0;
+      border-radius: 20px;
+      padding: 26px 0;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease, opacity .12s;
+    }
+    .big.small { font-size: 1.15rem; padding: 16px 0; border-radius: 16px; }
+    .b-in  { background: var(--in);  box-shadow: 0 6px 0 var(--in-dark); }
+    .b-out { background: var(--out); box-shadow: 0 6px 0 var(--out-dark); }
+    .b-brk { background: var(--brk); box-shadow: 0 5px 0 var(--brk-dark); }
+    .big:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 rgba(0, 0, 0, .25); }
+    .big:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
+    }
+ 
+    #message {
+      min-height: 3.2rem;
+      margin: 26px 0 0;
+      padding: 14px 16px;
+      border-radius: 14px;
+      text-align: center;
+      font-weight: 700;
+      color: var(--sub);
+      background: var(--panel);
+    }
+    #message.in    { background: #dcf2f0; color: var(--in-dark); }
+    #message.out   { background: #e6e1f6; color: var(--out-dark); }
+    #message.brk   { background: #fbead2; color: var(--brk-dark); }
+    #message.error { background: #fde3e3; color: #a12a2a; }
+    #message.stamp { animation: stamp .35s ease-out; }
+    @keyframes stamp {
+      0%   { transform: scale(1.12); opacity: .4; }
+      100% { transform: scale(1);    opacity: 1; }
+    }
+ 
+    /* ---------- 月の切り替え ---------- */
+    .month { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 20px; }
+    .month strong { font-size: 1.35rem; font-weight: 900; }
+    .month button {
+      font: inherit;
+      font-size: 1.2rem;
+      width: 44px; height: 44px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .month button:hover { background: #dbe5ef; }
+ 
+    .note { margin: 16px 0 0; font-size: .8rem; color: var(--sub); }
+    .err  { color: #a12a2a; font-weight: 700; text-align: center; }
+ 
+    /* ---------- カレンダー ---------- */
+    .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .wd { text-align: center; font-weight: 700; font-size: .85rem; color: var(--sub); padding-bottom: 2px; }
+    .wd:nth-child(1) { color: #c24a4a; }
+    .wd:nth-child(7) { color: #3b6fb5; }
+    .cell {
+      display: block;
+      width: 100%;
+      min-height: 76px;
+      padding: 6px 7px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--panel);
+      color: inherit;
+      font: inherit;
+      font-size: .72rem;
+      line-height: 1.4;
+      text-align: left;
+    }
+    button.cell { cursor: pointer; }
+    button.cell:hover { filter: brightness(.96); }
+    .cell.blank { background: transparent; }
+    .cell.has { background: #dcf2f0; }
+    .cell.today { outline: 2px solid var(--in); }
+    .cell .n { font-size: .85rem; font-weight: 700; }
+    .cell .t { color: var(--in-dark); }
+    .cell .h { font-weight: 900; font-size: .85rem; }
+ 
+    /* ---------- 統計 ---------- */
+    .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+    .fig { background: var(--panel); border-radius: 14px; padding: 12px 6px; text-align: center; }
+    .fig b { display: block; font-size: 1.5rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .fig span { font-size: .8rem; color: var(--sub); }
+    .chart { width: 100%; height: auto; display: block; }
+    .chart text { font-family: inherit; font-size: 11px; fill: var(--sub); }
+ 
+    /* ---------- 記録の編集ダイアログ ---------- */
+    dialog {
+      width: min(92vw, 480px);
+      border: 0;
+      border-radius: 24px;
+      padding: 26px 22px 22px;
+      color: var(--ink);
+      font-family: inherit;
+      box-shadow: 0 30px 80px -20px rgba(29, 43, 69, .5);
+    }
+    dialog::backdrop { background: rgba(29, 43, 69, .45); }
+    dialog h2 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 900; }
+    dialog .sum { margin: 0 0 16px; font-size: .85rem; color: var(--sub); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .row select, .row input {
+      font: inherit;
+      padding: 9px 10px;
+      border: 1px solid #c7d3e0;
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .mini {
+      font: inherit;
+      font-weight: 700;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--panel);
+      color: var(--ink);
+    }
+    .mini.primary { background: var(--ink); color: #fff; }
+    .mini.danger  { background: #fde3e3; color: #a12a2a; }
+    .adder { margin-top: 16px; padding-top: 16px; border-top: 2px dotted #c7d3e0; }
+    .adder p { margin: 0 0 8px; font-size: .85rem; font-weight: 700; color: var(--sub); }
+    #dlg-msg { min-height: 1.4rem; margin: 10px 0 0; font-size: .85rem; font-weight: 700; color: #a12a2a; }
+    .empty { color: var(--sub); font-size: .9rem; margin: 0 0 10px; }
+    .close-row { text-align: right; margin-top: 8px; }
+ 
+    @media (max-width: 520px) {
+      body { padding: 14px; }
+      .slip { padding: 32px 14px 22px; }
+      .cell { min-height: 62px; padding: 4px; font-size: .6rem; }
+      .cell .n, .cell .h { font-size: .72rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .big, .menu button, #message.stamp { transition: none; animation: none; }
+    }
+  </style>
+</head>
+ 
+<body>
+  <div class="app">
+    <nav class="menu" aria-label="メニュー">
+      <button data-view="punch" aria-current="page">打刻</button>
+      <button data-view="cal">カレンダー</button>
+      <button data-view="stats">統計</button>
+    </nav>
+ 
+    <!-- 打刻 -->
+    <main id="view-punch" class="slip punch">
+      <h1>勤怠管理</h1>
+      <div id="date"></div>
+      <div id="clock">--:--:--</div>
+ 
+      <div id="status" class="status" data-state="none">状態を確認しています</div>
+ 
+      <div class="buttons">
+        <button id="start_work"  class="big b-in">出勤</button>
+        <button id="finish_work" class="big b-out">退勤</button>
+        <button id="start_break" class="big small b-brk">休憩開始</button>
+        <button id="end_break"   class="big small b-brk">休憩終了</button>
+      </div>
+      <p id="message" aria-live="polite">ボタンを押すと記録されます</p>
+    </main>
+ 
+    <!-- カレンダー -->
+    <section id="view-cal" class="slip" hidden>
+      <div class="month">
+        <button data-step="-1" aria-label="前の月">‹</button>
+        <strong class="month-label"></strong>
+        <button data-step="1" aria-label="次の月">›</button>
+      </div>
+      <div id="cal-body"></div>
+      <p class="note">日付を押すと、その日の記録を修正・追加・削除できます。</p>
+    </section>
+ 
+    <!-- 統計 -->
+    <section id="view-stats" class="slip" hidden>
+      <div class="month">
+        <button data-step="-1" aria-label="前の月">‹</button>
+        <strong class="month-label"></strong>
+        <button data-step="1" aria-label="次の月">›</button>
+      </div>
+      <div id="stats-body"></div>
+      <p class="note">勤務時間は、最初の出勤から最後の退勤までの時間から、休憩を引いたものです。</p>
+    </section>
+  </div>
+ 
+  <!-- 記録の編集 -->
+  <dialog id="dlg" aria-labelledby="dlg-title">
+    <h2 id="dlg-title"></h2>
+    <p id="dlg-sum" class="sum"></p>
+    <div id="dlg-list"></div>
+    <div class="adder">
+      <p>記録を追加する</p>
+      <div class="row">
+        <select id="add-type"></select>
+        <input id="add-time" type="time">
+        <button id="add-btn" class="mini primary">追加</button>
+      </div>
+    </div>
+    <p id="dlg-msg" aria-live="polite"></p>
+    <div class="close-row"><button id="dlg-close" class="mini">閉じる</button></div>
+  </dialog>
+ 
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const TYPES = ["出勤", "退勤", "休憩開始", "休憩終了"];
+ 
+    /* ===== 共通 ===== */
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmt = (min) => `${Math.floor(min / 60)}:${pad(min % 60)}`;
+ 
+    let month = new Date();
+    month.setDate(1);
+    const ym = () => `${month.getFullYear()}-${pad(month.getMonth() + 1)}`;
+    const monthText = () => `${month.getFullYear()}年${month.getMonth() + 1}月`;
+ 
+    async function api(method, url, body) {
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined
+        });
+        const data = await res.json().catch(() => ({}));
+        return { ok: res.ok, data };
+      } catch (e) {
+        return { ok: false, data: { message: "サーバーに送れませんでした。起動しているか確認してください" } };
+      }
+    }
+ 
+    async function loadSummary() {
+      const r = await api("GET", "/api/summary?month=" + ym());
+      if (!r.ok) throw new Error("summary failed");
+      return r.data.days;
+    }
+ 
+    /* ===== メニュー ===== */
+    let current = "punch";
+    function show(view) {
+      current = view;
+      for (const name of ["punch", "cal", "stats"]) $("view-" + name).hidden = name !== view;
+      document.querySelectorAll(".menu button").forEach((b) => {
+        if (b.dataset.view === view) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      });
+      if (view === "punch") refreshStatus();
+      if (view === "cal") renderCal();
+      if (view === "stats") renderStats();
+    }
+    document.querySelectorAll(".menu button").forEach((b) =>
+      b.addEventListener("click", () => show(b.dataset.view))
+    );
+    document.querySelectorAll(".month button").forEach((b) =>
+      b.addEventListener("click", () => {
+        month.setMonth(month.getMonth() + Number(b.dataset.step));
+        show(current);
+      })
+    );
+ 
+    /* ===== 打刻 ===== */
+    function tick() {
+      const now = new Date();
+      $("date").textContent = now.toLocaleDateString("ja-JP", {
+        year: "numeric", month: "long", day: "numeric", weekday: "short"
+      });
+      $("clock").textContent = now.toLocaleTimeString("ja-JP", { hour12: false });
+    }
+    tick();
+    setInterval(tick, 1000);
+ 
+    // 状態ごとに押せるボタン
+    const ENABLED = {
+      none:    ["start_work"],
+      working: ["start_break", "finish_work"],
+      break:   ["end_break", "finish_work"],
+      done:    []
+    };
+    const BUTTONS = ["start_work", "finish_work", "start_break", "end_break"];
+ 
+    async function refreshStatus() {
+      const r = await api("GET", "/api/status");
+      const box = $("status");
+      if (!r.ok) {
+        box.textContent = "状態を取得できません";
+        box.dataset.state = "none";
+        BUTTONS.forEach((id) => ($(id).disabled = false));
+        return;
+      }
+      const { state, in: inTime } = r.data;
+      box.dataset.state = state;
+      box.textContent = {
+        none: "まだ出勤していません",
+        working: `勤務中(${inTime} から)`,
+        break: "休憩中",
+        done: "退勤済み。おつかれさまでした"
+      }[state];
+      BUTTONS.forEach((id) => ($(id).disabled = !ENABLED[state].includes(id)));
+    }
+    refreshStatus();
+    setInterval(() => { if (current === "punch") refreshStatus(); }, 60000);
+ 
+    async function send(url, cls) {
+      const message = $("message");
+      const r = await api("POST", url);
+      message.textContent = r.data.message || "エラーが起きました";
+      message.className = r.ok ? cls : "error";
+      void message.offsetWidth;
+      message.classList.add("stamp");
+      refreshStatus();
+    }
+    $("start_work").addEventListener("click",  () => send("/api/clock-in", "in"));
+    $("finish_work").addEventListener("click", () => send("/api/clock-out", "out"));
+    $("start_break").addEventListener("click", () => send("/api/break-start", "brk"));
+    $("end_break").addEventListener("click",   () => send("/api/break-end", "brk"));
+ 
+    /* ===== カレンダー ===== */
+    async function renderCal() {
+      document.querySelectorAll(".month-label").forEach((e) => (e.textContent = monthText()));
+      const body = $("cal-body");
+      let days;
+      try {
+        days = await loadSummary();
+      } catch (e) {
+        body.innerHTML = '<p class="err">記録を読み込めませんでした</p>';
+        return;
+      }
+ 
+      const y = month.getFullYear(), m = month.getMonth();
+      const first = new Date(y, m, 1).getDay();
+      const last = new Date(y, m + 1, 0).getDate();
+      const t = new Date();
+      const todayKey = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+ 
+      let html = "";
+      for (const w of ["日", "月", "火", "水", "木", "金", "土"]) html += `<div class="wd">${w}</div>`;
+      for (let i = 0; i < first; i++) html += '<div class="cell blank"></div>';
+ 
+      for (let d = 1; d <= last; d++) {
+        const key = `${ym()}-${pad(d)}`;
+        const rec = days[key];
+        const cls = ["cell"];
+        if (rec) cls.push("has");
+        if (key === todayKey) cls.push("today");
+        let inner = `<div class="n">${d}</div>`;
+        if (rec) {
+          inner += `<div class="t">${rec.in || "?"}–${rec.out || "…"}</div>`;
+          if (rec.minutes != null) inner += `<div class="h">${fmt(rec.minutes)}</div>`;
+        }
+        html += `<button class="${cls.join(" ")}" data-date="${key}">${inner}</button>`;
+      }
+      body.innerHTML = `<div class="cal">${html}</div>`;
+    }
+ 
+    $("cal-body").addEventListener("click", (e) => {
+      const cell = e.target.closest("[data-date]");
+      if (cell) openDay(cell.dataset.date);
+    });
+ 
+    /* ===== 記録の編集 ===== */
+    const dlg = $("dlg");
+    let dlgDate = null;
+    const typeOptions = (selected) =>
+      TYPES.map((x) => `<option${x === selected ? " selected" : ""}>${x}</option>`).join("");
+ 
+    $("add-type").innerHTML = typeOptions("出勤");
+ 
+    function setMsg(text) { $("dlg-msg").textContent = text || ""; }
+ 
+    async function openDay(date) {
+      dlgDate = date;
+      const d = new Date(date + "T00:00:00");
+      $("dlg-title").textContent = d.toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" });
+      setMsg("");
+      $("add-time").value = "";
+      dlg.showModal();
+      await loadDay();
+    }
+ 
+    async function loadDay() {
+      const r = await api("GET", "/api/records?date=" + dlgDate);
+      if (!r.ok) {
+        $("dlg-list").innerHTML = '<p class="err">記録を読み込めませんでした</p>';
+        return;
+      }
+      const list = r.data.records;
+      $("dlg-list").innerHTML = list.length
+        ? list.map((rec) => `
+            <div class="row" data-id="${rec.id}">
+              <select>${typeOptions(rec.type)}</select>
+              <input type="time" value="${rec.time.replace("T", " ").slice(11, 16)}">
+              <button class="mini primary" data-act="save">保存</button>
+              <button class="mini danger" data-act="del">削除</button>
+            </div>`).join("")
+        : '<p class="empty">この日の記録はありません</p>';
+ 
+      // その日の勤務時間も表示
+      const s = await api("GET", "/api/summary?month=" + dlgDate.slice(0, 7));
+      const info = s.ok ? s.data.days[dlgDate] : null;
+      $("dlg-sum").textContent = info && info.minutes != null
+        ? `勤務 ${fmt(info.minutes)}(休憩 ${fmt(info.break_minutes)} を除く)`
+        : "出勤と退勤がそろうと、勤務時間が出ます";
+    }
+ 
+    async function afterChange() {
+      await loadDay();
+      if (current === "cal") renderCal();
+      refreshStatus();
+    }
+ 
+    $("dlg-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const row = btn.closest(".row");
+      const id = row.dataset.id;
+      setMsg("");
+ 
+      if (btn.dataset.act === "del") {
+        if (!confirm("この記録を削除しますか?")) return;
+        const r = await api("DELETE", "/api/records/" + id);
+        if (!r.ok) return setMsg(r.data.message);
+      } else {
+        const time = row.querySelector("input").value;
+        if (!time) return setMsg("時刻を入れてください");
+        const r = await api("PUT", "/api/records/" + id, {
+          type: row.querySelector("select").value,
+          time: `${dlgDate} ${time}:00`
+        });
+        if (!r.ok) return setMsg(r.data.message);
+      }
+      afterChange();
+    });
+ 
+    $("add-btn").addEventListener("click", async () => {
+      const time = $("add-time").value;
+      if (!time) return setMsg("時刻を入れてください");
+      const r = await api("POST", "/api/records", {
+        type: $("add-type").value,
+        time: `${dlgDate} ${time}:00`
+      });
+      if (!r.ok) return setMsg(r.data.message);
+      setMsg("");
+      $("add-time").value = "";
+      afterChange();
+    });
+ 
+    $("dlg-close").addEventListener("click", () => dlg.close());
+ 
+    /* ===== 統計(折れ線グラフ) ===== */
+    async function renderStats() {
+      document.querySelectorAll(".month-label").forEach((e) => (e.textContent = monthText()));
+      const body = $("stats-body");
+      let days;
+      try {
+        days = await loadSummary();
+      } catch (e) {
+        body.innerHTML = '<p class="err">記録を読み込めませんでした</p>';
+        return;
+      }
+ 
+      const n = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+      const points = [];
+      for (let d = 1; d <= n; d++) {
+        const rec = days[`${ym()}-${pad(d)}`];
+        if (rec && rec.minutes != null) points.push({ day: d, min: rec.minutes });
+      }
+ 
+      const total = points.reduce((s, p) => s + p.min, 0);
+      const avg = points.length ? Math.round(total / points.length) : 0;
+      const figures = `
+        <div class="figures">
+          <div class="fig"><b>${points.length}日</b><span>勤務日数</span></div>
+          <div class="fig"><b>${fmt(total)}</b><span>合計時間</span></div>
+          <div class="fig"><b>${fmt(avg)}</b><span>1日の平均</span></div>
+        </div>`;
+ 
+      if (!points.length) {
+        body.innerHTML = figures + '<p class="note" style="text-align:center">この月は、出勤と退勤が両方そろった日がまだありません</p>';
+        return;
+      }
+ 
+      const W = 640, H = 300, L = 44, R = 16, T = 16, B = 32;
+      const maxH = Math.max(...points.map((p) => p.min)) / 60;
+      const yMax = Math.max(10, Math.ceil(maxH / 2) * 2);
+      const x = (d) => L + ((d - 1) / (n - 1)) * (W - L - R);
+      const y = (h) => H - B - (h / yMax) * (H - T - B);
+ 
+      let svg = "";
+      for (let h = 0; h <= yMax; h += 2) {
+        svg += `<line x1="${L}" x2="${W - R}" y1="${y(h)}" y2="${y(h)}" stroke="#e1e8f0"/>`;
+        svg += `<text x="${L - 8}" y="${y(h) + 4}" text-anchor="end">${h}h</text>`;
+      }
+      for (let d = 1; d <= n; d++) {
+        if (d === 1 || d % 5 === 0 || d === n) {
+          svg += `<text x="${x(d)}" y="${H - 10}" text-anchor="middle">${d}</text>`;
+        }
+      }
+      svg += `<line x1="${L}" x2="${W - R}" y1="${y(8)}" y2="${y(8)}" stroke="#5a49a6" stroke-dasharray="5 5"/>`;
+      svg += `<text x="${W - R}" y="${y(8) - 6}" text-anchor="end" style="fill:#5a49a6">8h</text>`;
+ 
+      let path = "";
+      points.forEach((p, i) => {
+        const connected = i > 0 && points[i - 1].day === p.day - 1;
+        path += `${connected ? "L" : "M"}${x(p.day).toFixed(1)} ${y(p.min / 60).toFixed(1)} `;
+      });
+      svg += `<path d="${path}" fill="none" stroke="#12857f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+ 
+      for (const p of points) {
+        svg += `<circle cx="${x(p.day)}" cy="${y(p.min / 60)}" r="5" fill="#fff" stroke="#12857f" stroke-width="3">
+                  <title>${month.getMonth() + 1}月${p.day}日: ${fmt(p.min)}</title></circle>`;
+      }
+ 
+      body.innerHTML = figures +
+        `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="日ごとの勤務時間の折れ線グラフ">${svg}</svg>`;
+    }
+  </script>
+</body>
+</html>
+ 
+
